@@ -1,0 +1,31 @@
+# requirements.txt
+# ------------------------------------------------------------
+# Instalación:
+#   pip install -r requirements.txt
+#
+# Setup:
+#   1) Crear un archivo .env en la raíz (ver ejemplo en el chat)
+#   2) Asegurarte de tener esta estructura:
+#        /run.py
+#        /erp_stock_flow/
+#          __init__.py
+#          config.py
+#          auth_web.py
+#          auth_sellercenter.py
+#          pedidos_api.py
+#          sellercenter_api.py
+#          erp_orchestration_api.py
+#          erp_integration_api.py
+#          mappers.py
+#          flow_runner.py
+#
+# Run:
+#   python run.py
+#
+# Nota:
+#  - El script imprime: traceId, redisKeyToCheck y el topic de Kafka para validar.
+#  - No subas .env al repo (agregalo al .gitignore).
+# ------------------------------------------------------------
+
+requests==2.32.3
+python-dotenv==1.0.1
