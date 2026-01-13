@@ -1,6 +1,36 @@
 import requests
 from typing import Any, Dict, Optional
 
+def get_customer_default_address_by_customer_id(
+    url: str,
+    web_bearer_token: str,
+    customer_id: str,
+    farma_access_token: Optional[str] = None,
+    cookies_header_value: Optional[str] = None,
+    timeout_seconds: int = 30,
+) -> Dict[str, Any]:
+    params = {"CustomerId": customer_id}
+
+    headers = {
+        "accept": "application/json",
+        "authorization": f"Bearer {web_bearer_token}",
+    }
+
+    # opcionales (por si tu ambiente los requiere)
+    if farma_access_token:
+        headers["farma-access-token"] = farma_access_token
+    if cookies_header_value:
+        headers["cookie"] = cookies_header_value
+
+    resp = requests.get(url, params=params, headers=headers, timeout=timeout_seconds)
+
+    if not resp.ok:
+        print("DEFAULT-ADDRESS URL:", resp.url)
+        print("DEFAULT-ADDRESS STATUS:", resp.status_code)
+        print("DEFAULT-ADDRESS TEXT:", resp.text[:1200])
+
+    resp.raise_for_status()
+    return resp.json()
 
 def get_stock_request_data(
     base_url: str,

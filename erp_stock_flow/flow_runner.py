@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import math
 import json
 import time 
+import os
 from .config import (
     WEB_LOGIN_URL,
     SELLERCENTER_LOGIN_URL,
@@ -9,12 +10,13 @@ from .config import (
     REQUEST_STOCK_URL,
     PUBLISH_STOCK_RESPONSE_URL,
     STOCK_REQUEST_DATA_BASE_URL,
+    CUSTOMER_DEFAULT_ADDRESS_URL,
     STOCK_REQUEST_DATA_SUFFIX,
 )
 
 from .auth_web import web_sign_in_get_bearer_token
 from .auth_sellercenter import sellercenter_sign_in_get_token
-from .pedidos_api import get_stock_request_data
+from .pedidos_api import get_stock_request_data, get_customer_default_address_by_customer_id
 from .sellercenter_api import get_pharmacies_by_location_app
 from .erp_orchestration_api import request_stock
 from .erp_integration_api import publish_stock_response
@@ -23,6 +25,64 @@ from .mappers import (
     build_publish_stock_response_body,
 )
 
+def _get_customer_lat_lng(
+    web_bearer_token: str,
+    customer_id: str,
+    timeout_seconds: int,
+) -> Tuple[float, float]:
+    payload = get_customer_default_address_by_customer_id(
+        url=CUSTOMER_DEFAULT_ADDRESS_URL,
+        web_bearer_token=web_bearer_token,
+        customer_id=customer_id,
+        farma_access_token=os.getenv("FT_FARMA_ACCESS_TOKEN"),
+        cookies_header_value=os.getenv("FT_COOKIES"),
+        timeout_seconds=timeout_seconds,
+    )
+
+    result = payload.get("result") or {}
+    lat = result.get("latitude")
+    lng = result.get("longitude")
+
+    if lat is None or lng is None:
+        raise KeyError("DefaultAddress no trae latitude/longitude en payload['result'].")
+
+    return float(lat), float(lng)
+
+def _parse_optional_bool_env(value: Optional[str]) -> Optional[bool]:
+    """
+    Convierte strings tipo env a bool opcional:
+    - None / "" => None (no fuerza)
+    - "true/1/yes/y" => True
+    - "false/0/no/n" => False
+    Si viene cualquier otra cosa: None (para no romper).
+    """
+    if value is None:
+        return None
+    v = value.strip().lower()
+    if v == "":
+        return None
+    if v in ("1", "true", "yes", "y"):
+        return True
+    if v in ("0", "false", "no", "n"):
+        return False
+    return None
+
+
+def _build_pharmacies_plan(
+    pharmacies_count: int,
+    forced_stock: Optional[bool],
+) -> List[bool]:
+    """
+    Devuelve el plan final de FULL/NO por farmacia (bool = is_full).
+    - forced_stock True => todo True
+    - forced_stock False => todo False
+    - None => mitad/mitad (curso actual)
+    """
+    if forced_stock is True:
+        return [True] * pharmacies_count
+    if forced_stock is False:
+        return [False] * pharmacies_count
+    return _split_half_true_half_false(pharmacies_count)
 
 def _split_half_true_half_false(total: int) -> List[bool]:
     true_count = math.ceil(total / 2)
@@ -302,13 +362,9 @@ def run_erp_stock_flow(
     sellercenter_password: str,
     order_id: str,
     customer_id: str,
-    latitude: float,
-    longitude: float,
     items_per_page: int = 5,
     timeout_seconds: int = 30,
     delay_seconds: int = 10,
-    force_all_full_stock: bool = False,
-    force_all_no_stock: bool = False,
 ) -> Dict[str, Any]:
     # 1) Tokens
     web_bearer_token, sellercenter_token = _get_tokens(
@@ -317,7 +373,13 @@ def run_erp_stock_flow(
         sellercenter_username=sellercenter_username,
         sellercenter_password=sellercenter_password,
     )
-
+    
+    latitude, longitude = _get_customer_lat_lng(
+        web_bearer_token=web_bearer_token,
+        customer_id=customer_id,
+        timeout_seconds=timeout_seconds,
+    )
+    print(f"\n[INFO] DefaultAddress coords: lat={latitude}, lng={longitude}\n")
     # 2) Farmacias (ByLocationApp)
     pharmacies = _get_pharmacies(
         sellercenter_token=sellercenter_token,
@@ -340,18 +402,20 @@ def run_erp_stock_flow(
         order_id=order_id,
     )
 
-    # 5) Plan farmacias: mitad FULL / mitad NO + 1 PARTIAL con 1 item en False
-    if force_all_full_stock:
-        pharmacies_plan = [True] * len(pharmacies)
-        partial_pharmacy_index = None  # no hacemos PARTIAL en modo "todas FULL"
-    elif force_all_no_stock:
-        pharmacies_plan = [False] * len(pharmacies)
-        partial_pharmacy_index = None  # no hacemos PARTIAL en modo "todas NO"
-    else:
-        pharmacies_plan = _split_half_true_half_false(len(pharmacies))
-        partial_pharmacy_index = _pick_partial_pharmacy_index(pharmacies_plan)
+    # 5) Plan farmacias: una sola env FT_FORCE_STOCK
+    #    - true  => todas FULL
+    #    - false => todas NO
+    #    - vacío/no seteada => lógica actual mitad/mitad + PARTIAL
+    forced_stock = _parse_optional_bool_env(os.getenv("FT_FORCE_STOCK"))
+    pharmacies_plan = _build_pharmacies_plan(len(pharmacies), forced_stock)
 
-    partial_items_plan = _make_partial_one_item_unavailable(len(stock_items), unavailable_index=0)
+    if forced_stock is None:
+        partial_pharmacy_index = _pick_partial_pharmacy_index(pharmacies_plan)
+        partial_items_plan = _make_partial_one_item_unavailable(len(stock_items), unavailable_index=0)
+    else:
+        # Si forzás FULL o NO, no hacemos PARTIAL
+        partial_pharmacy_index = None
+        partial_items_plan = []
 
     _print_pharmacies_status(
         pharmacies=pharmacies,
@@ -369,7 +433,7 @@ def run_erp_stock_flow(
         web_bearer_token=web_bearer_token,
         trace_id=trace_id,
         timeout_seconds=timeout_seconds,
-        delay_seconds=delay_seconds
+        delay_seconds=delay_seconds,
     )
 
     return {
