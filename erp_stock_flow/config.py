@@ -6,7 +6,7 @@ load_dotenv()
 FT_ENV_STG = os.getenv("FT_ENV_STG", "False").strip().lower() in ("1", "true", "yes", "y", "on")
 
 if FT_ENV_STG:
-    BASE_URL = "https://api-staging.farmatouch.com"
+    BASE_URL = "https://staging.farmatouch.com"
     print("Iniciando ejecución en entorno Staging")
 else:
     BASE_URL = "https://quality.farmatouch.com"
