@@ -24,15 +24,12 @@ def publish_stock_response(
         "text": resp.text,
     }
 
-    # Si querés, agregamos también el json parseado (sin reemplazar lo crudo)
     try:
         raw["json"] = resp.json()
     except ValueError:
         raw["json"] = None
 
-    # Si querés que el flujo corte al fallar:
     if not resp.ok:
-        # igual ya devolvemos raw, pero levantamos error para que te enteres
         resp.raise_for_status()
 
     return raw

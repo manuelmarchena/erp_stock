@@ -28,17 +28,6 @@ FT_CUSTOMER_ID = _require_env("FT_CUSTOMER_ID")
 # Opcionales
 FT_ITEMS_PER_PAGE = int(os.getenv("FT_ITEMS_PER_PAGE", "5"))
 
-# (Ya no se usa en el flujo actual)
-# FT_AVAILABILITY = os.getenv("FT_AVAILABILITY", "false").strip().lower() in ("1", "true", "yes", "y")
-# FT_FARMA_ACCESS_TOKEN = os.getenv("FT_FARMA_ACCESS_TOKEN")
-# FT_COOKIES = os.getenv("FT_COOKIES")
-
-# Nueva única variable:
-# FT_FORCE_STOCK=true  => todas FULL
-# FT_FORCE_STOCK=false => todas NO
-# FT_FORCE_STOCK=      => lógica actual (mitad/mitad + PARTIAL)
-# (No hace falta leerla acá: la lee flow_runner desde os.getenv directamente)
-
 # AWAIT
 FT_DELAY_SECONDS = int(os.getenv("FT_DELAY_SECONDS", "10"))
 
